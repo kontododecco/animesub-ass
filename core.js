@@ -216,7 +216,7 @@ function matchSubtitles(subtitles, targetSeason, targetEpisode) {
     });
 }
 
-function createSubtitleUrl(subtitle, searchQuery, searchType, format = 'srt', baseUrl = '') {
+function createSubtitleUrl(subtitle, searchQuery, searchType, format = 'srt', baseUrl = '', convertToVtt = false) {
     const params = new URLSearchParams({
         id: subtitle.id,
         hash: subtitle.hash,
@@ -224,7 +224,9 @@ function createSubtitleUrl(subtitle, searchQuery, searchType, format = 'srt', ba
         type: searchType,
         format
     });
-    return `${baseUrl}/subtitles/download.${format}?${params.toString()}`;
+    if (convertToVtt) params.set('convert', 'vtt');
+    const ext = convertToVtt ? 'vtt' : format;
+    return `${baseUrl}/subtitles/download.${ext}?${params.toString()}`;
 }
 
 // ----- Dekodowanie -----
@@ -378,6 +380,65 @@ function validateAndFixASS(content) {
     return lines.join('\n');
 }
 
+/**
+ * Konwersja ASS/SSA -> WebVTT
+ * Usuwa tagi formatowania ASS, zamienia timestampy na format VTT
+ */
+function assToVtt(assText) {
+    const lines = assText.split('\n');
+    const dialogues = [];
+
+    for (const line of lines) {
+        if (!line.startsWith('Dialogue:')) continue;
+
+        // Format: Dialogue: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+        const parts = line.split(',');
+        if (parts.length < 10) continue;
+
+        const start = assTimestampToVtt(parts[1].trim());
+        const end   = assTimestampToVtt(parts[2].trim());
+        // Text to wszystko od 10. przecinka (może zawierać przecinki)
+        const rawText = parts.slice(9).join(',').trim();
+        const text = stripAssTags(rawText);
+
+        if (!text || !start || !end) continue;
+        dialogues.push({ start, end, text });
+    }
+
+    const body = dialogues.map((d, i) =>
+        `${i + 1}\n${d.start} --> ${d.end}\n${d.text}`
+    ).join('\n\n');
+
+    return `WEBVTT\n\n${body}\n`;
+}
+
+/**
+ * Zamienia timestamp ASS (H:MM:SS.CS) na VTT (HH:MM:SS.mmm)
+ */
+function assTimestampToVtt(ts) {
+    // H:MM:SS.CS -> HH:MM:SS.mmm
+    const m = ts.match(/^(\d+):(\d{2}):(\d{2})\.(\d{2})$/);
+    if (!m) return null;
+    const h   = m[1].padStart(2, '0');
+    const min = m[2];
+    const sec = m[3];
+    const ms  = (parseInt(m[4], 10) * 10).toString().padStart(3, '0');
+    return `${h}:${min}:${sec}.${ms}`;
+}
+
+/**
+ * Usuwa tagi formatowania ASS z tekstu dialogu
+ * np. {\an8}, {\b1}, {\pos(x,y)}, \N -> newline
+ */
+function stripAssTags(text) {
+    return text
+        .replace(/\{[^}]*\}/g, '')   // usuń wszystkie {tagi}
+        .replace(/\\N/g, '\n')        // \N -> nowa linia
+        .replace(/\\n/g, '\n')        // \n -> nowa linia
+        .replace(/\\h/g, ' ')         // \h -> spacja
+        .trim();
+}
+
 async function handleDownload(req, res) {
     const url = new URL(req.url, `https://${req.headers.host}`);
     const q = Object.fromEntries(url.searchParams);
@@ -481,6 +542,14 @@ async function handleDownload(req, res) {
             textContent = textContent.replace(/\r?\n/g, '\r\n');
         }
 
+        // Konwersja ASS/SSA -> VTT jeśli zażądano
+        const convertToVtt = q.convert === 'vtt' && (subtitleExtension === '.ass' || subtitleExtension === '.ssa');
+        if (convertToVtt) {
+            console.log('[Download] Konwertuję ASS -> VTT');
+            textContent = assToVtt(textContent);
+            subtitleExtension = '.vtt';
+        }
+
         let contentType = 'text/plain; charset=utf-8';
         if (subtitleExtension === '.vtt') contentType = 'text/vtt; charset=utf-8';
 
@@ -514,6 +583,7 @@ module.exports = {
     matchSubtitles,
     createSubtitleUrl,
     handleDownload,
+    assToVtt,
     SEARCH_URL,
     DOWNLOAD_URL,
     BASE_URL
