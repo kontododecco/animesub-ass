@@ -1121,11 +1121,18 @@ const server = http.createServer((req, res) => {
         req.query = Object.fromEntries(url.searchParams);
         downloadSubtitle(req, res);
     } else {
-        const router = getRouter(builder.getInterface());
-        router(req, res, () => {
-            res.writeHead(404, { 'Content-Type': 'text/plain' });
-            res.end('Not Found');
-        });
+        const router = getRouter(addonInterface);
+
+// Kluczowa zmiana dla Vercel:
+module.exports = (req, res) => {
+    router(req, res, function (err) {
+        if (err) {
+            res.status(500).send(err.message);
+        } else {
+            res.status(404).send('Not Found');
+        }
+    });
+};
     }
 });
 
