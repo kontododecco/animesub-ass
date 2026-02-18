@@ -387,8 +387,7 @@ async function handleDownload(req, res) {
     console.log(`[Download] id=${id}, hash=${hash}, format=${format}`);
 
     if (!id || !hash) {
-        res.statusCode = 400;
-        res.end('Missing parameters');
+        res.status(400).end('Missing parameters');
         return;
     }
 
@@ -488,25 +487,22 @@ async function handleDownload(req, res) {
         const outBuf = toUtf8Buffer(textContent, subtitleExtension !== '.ass' && subtitleExtension !== '.ssa');
         const filename = `subtitle${subtitleExtension}`;
 
-        res.writeHead(200, {
-            'Content-Type': contentType,
-            'Content-Length': outBuf.length,
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Range, User-Agent, X-Requested-With',
-            'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Content-Type',
-            'Content-Disposition': `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-            'Cache-Control': 'public, max-age=86400',
-            'X-Content-Type-Options': 'nosniff',
-            'Accept-Ranges': 'bytes'
-        });
-        res.end(outBuf);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', outBuf.length);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, User-Agent, X-Requested-With');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Content-Type');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.status(200).end(outBuf);
         console.log(`[Download] ✓ Wysłano ${outBuf.length} bajtów`);
 
     } catch (error) {
         console.error('[Download Error]', error.message);
-        res.statusCode = 500;
-        res.end(`Download failed: ${error.message}`);
+        res.status(500).end(`Download failed: ${error.message}`);
     }
 }
 
