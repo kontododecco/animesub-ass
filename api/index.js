@@ -1121,7 +1121,7 @@ const server = http.createServer((req, res) => {
         req.query = Object.fromEntries(url.searchParams);
         downloadSubtitle(req, res);
     } else {
-        const router = getRouter(addonInterface);
+        const router = getRouter(builder);
 
 // Kluczowa zmiana dla Vercel:
 module.exports = (req, res) => {
