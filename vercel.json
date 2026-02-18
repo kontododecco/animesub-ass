@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/manifest.json", "destination": "/api/manifest" },
+    { "source": "/subtitles/download:path*", "destination": "/api/download" },
+    { "source": "/:resource/:type/:id.json", "destination": "/api/stremio" },
+    { "source": "/(.*)", "destination": "/api/stremio" }
+  ],
+  "functions": {
+    "api/stremio.js": {
+      "maxDuration": 10
+    },
+    "api/download.js": {
+      "maxDuration": 25
+    },
+    "api/manifest.js": {
+      "maxDuration": 5
+    }
+  }
+}
