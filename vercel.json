@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/manifest.json", "destination": "/api/manifest" },
+    { "source": "/subtitles/download:path*", "destination": "/api/download" },
+    { "source": "/subtitles/:type/:id", "destination": "/api/stremio" },
+    { "source": "/", "destination": "/api/manifest" },
+    { "source": "/(.*)", "destination": "/api/stremio" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Range, User-Agent, X-Requested-With" }
+      ]
+    }
+  ],
+  "functions": {
+    "api/stremio.js": { "maxDuration": 10 },
+    "api/download.js": { "maxDuration": 25 },
+    "api/manifest.js": { "maxDuration": 5 }
+  }
+}
