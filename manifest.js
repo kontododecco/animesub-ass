@@ -1,0 +1,17 @@
+// manifest.js - Definicja manifestu wtyczki
+module.exports = {
+    id: 'community.animesub.info',
+    version: '1.1.0',
+    name: 'AnimeSub.info Subtitles',
+    description: 'Polskie napisy do anime z animesub.info (libass compatible)',
+    logo: 'https://i.imgur.com/qKLYVZx.png',
+    resources: ['subtitles'],
+    types: ['movie', 'series'],
+    idPrefixes: ['tt', 'kitsu'],
+    catalogs: [],
+    behaviorHints: {
+        configurable: false,
+        configurationRequired: false,
+        proxyStreams: true
+    }
+};
