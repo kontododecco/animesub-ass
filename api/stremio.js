@@ -98,27 +98,39 @@ module.exports = async (req, res) => {
 
             allSubtitles.sort((a, b) => (b.downloadCount || 0) - (a.downloadCount || 0));
 
-            const stremioSubtitles = allSubtitles.slice(0, 10).map(sub => {
+            const stremioSubtitles = [];
+
+            for (const sub of allSubtitles.slice(0, 10)) {
                 let format = 'srt';
                 const descLower = (sub.description || '').toLowerCase();
                 const typeLower = (sub.formatType || '').toLowerCase();
                 if (descLower.includes('.ass') || typeLower.includes('ass')) format = 'ass';
                 else if (descLower.includes('.ssa') || typeLower.includes('ssa')) format = 'ssa';
 
-                const label = [
+                const baseLabel = [
                     sub.titleEng || sub.titleOrg,
                     sub.author ? `by ${sub.author}` : null,
-                    `[${format.toUpperCase()}]`,
                     sub.downloadCount ? `⬇ ${sub.downloadCount}` : null
                 ].filter(Boolean).join(' | ');
 
-                return {
+                // Oryginalny wpis (ASS/SSA/SRT)
+                stremioSubtitles.push({
                     id: `animesub-${sub.id}`,
                     url: createSubtitleUrl(sub, sub.searchQuery, sub.searchType, format, baseUrl),
                     lang: 'pol',
-                    SubtitleName: label
-                };
-            });
+                    SubtitleName: `${baseLabel} [${format.toUpperCase()}]`
+                });
+
+                // Dodatkowy wpis VTT dla ASS/SSA
+                if (format === 'ass' || format === 'ssa') {
+                    stremioSubtitles.push({
+                        id: `animesub-${sub.id}-vtt`,
+                        url: createSubtitleUrl(sub, sub.searchQuery, sub.searchType, format, baseUrl, true),
+                        lang: 'pol',
+                        SubtitleName: `${baseLabel} [VTT]`
+                    });
+                }
+            }
 
             console.log(`[Wynik] ${stremioSubtitles.length} napisów`);
             return res.status(200).json({ subtitles: stremioSubtitles });
