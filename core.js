@@ -382,7 +382,7 @@ function validateAndFixASS(content) {
 
 /**
  * Konwersja ASS/SSA -> WebVTT
- * Usuwa tagi formatowania ASS, zamienia timestampy na format VTT
+ * Obsługuje nakładające się napisy przez scalanie lub dodawanie pozycji VTT
  */
 function assToVtt(assText) {
     const lines = assText.split('\n');
@@ -397,45 +397,121 @@ function assToVtt(assText) {
 
         const start = assTimestampToVtt(parts[1].trim());
         const end   = assTimestampToVtt(parts[2].trim());
-        // Text to wszystko od 10. przecinka (może zawierać przecinki)
+        if (!start || !end) continue;
+
         const rawText = parts.slice(9).join(',').trim();
+
+        // Wykryj pozycję z tagów ASS przed ich usunięciem
+        const position = detectAssPosition(rawText);
         const text = stripAssTags(rawText);
 
-        if (!text || !start || !end) continue;
-        dialogues.push({ start, end, text });
+        if (!text) continue;
+        dialogues.push({ start, end, text, position,
+            startMs: vttToMs(start), endMs: vttToMs(end) });
     }
 
-    const body = dialogues.map((d, i) =>
-        `${i + 1}\n${d.start} --> ${d.end}\n${d.text}`
-    ).join('\n\n');
+    // Sortuj chronologicznie
+    dialogues.sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+    // Scal nakładające się napisy w tym samym czasie i tej samej pozycji
+    const merged = mergeOverlapping(dialogues);
+
+    const body = merged.map((d, i) => {
+        const cue = d.position
+            ? `${i + 1}\n${d.start} --> ${d.end} ${d.position}`
+            : `${i + 1}\n${d.start} --> ${d.end}`;
+        return `${cue}\n${d.text}`;
+    }).join('\n\n');
 
     return `WEBVTT\n\n${body}\n`;
+}
+
+/**
+ * Scala nakładające się napisy o tym samym czasie i pozycji
+ */
+function mergeOverlapping(dialogues) {
+    if (dialogues.length === 0) return [];
+    const result = [];
+
+    for (const d of dialogues) {
+        // Szukaj poprzedniego cue z dokładnie tym samym czasem i pozycją
+        const same = result.find(r =>
+            r.start === d.start &&
+            r.end   === d.end   &&
+            r.position === d.position
+        );
+
+        if (same) {
+            // Scal teksty przez nową linię
+            same.text += '\n' + d.text;
+        } else {
+            result.push({ ...d });
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Wykrywa pozycję z tagów ASS i zwraca odpowiadającą dyrektywę VTT
+ * \an1-9 = alignment, \pos(x,y) = dokładna pozycja
+ */
+function detectAssPosition(rawText) {
+    // \an1-9 - numeracja jak na klawiaturze numerycznej
+    // 7 8 9 = góra, 4 5 6 = środek, 1 2 3 = dół
+    const anMatch = rawText.match(/\{[^}]*\\an(\d)[^}]*\}/);
+    if (anMatch) {
+        const an = parseInt(anMatch[1], 10);
+        // Pozycja pionowa
+        const line = [1,2,3].includes(an) ? 'line:90%' :
+                     [7,8,9].includes(an) ? 'line:10%' : 'line:50%';
+        // Pozycja pozioma
+        const position = [1,4,7].includes(an) ? 'position:10% align:left' :
+                         [3,6,9].includes(an) ? 'position:90% align:right' : 'position:50% align:center';
+        return `${line} ${position}`;
+    }
+
+    // \pos(x,y) - procentowa konwersja zakładając PlayRes 1920x1080
+    const posMatch = rawText.match(/\{[^}]*\\pos\(([0-9.]+),([0-9.]+)\)[^}]*\}/);
+    if (posMatch) {
+        const xPct = Math.round(parseFloat(posMatch[1]) / 1920 * 100);
+        const yPct = Math.round(parseFloat(posMatch[2]) / 1080 * 100);
+        const align = xPct < 33 ? 'align:left' : xPct > 66 ? 'align:right' : 'align:center';
+        return `line:${yPct}% position:${xPct}% ${align}`;
+    }
+
+    return null; // domyślna pozycja (dół-centrum)
+}
+
+/**
+ * Zamienia timestamp VTT na milisekundy (do porównań)
+ */
+function vttToMs(vtt) {
+    const m = vtt.match(/^(\d+):(\d{2}):(\d{2})\.(\d{3})$/);
+    if (!m) return 0;
+    return ((+m[1]) * 3600 + (+m[2]) * 60 + (+m[3])) * 1000 + (+m[4]);
 }
 
 /**
  * Zamienia timestamp ASS (H:MM:SS.CS) na VTT (HH:MM:SS.mmm)
  */
 function assTimestampToVtt(ts) {
-    // H:MM:SS.CS -> HH:MM:SS.mmm
     const m = ts.match(/^(\d+):(\d{2}):(\d{2})\.(\d{2})$/);
     if (!m) return null;
-    const h   = m[1].padStart(2, '0');
-    const min = m[2];
-    const sec = m[3];
-    const ms  = (parseInt(m[4], 10) * 10).toString().padStart(3, '0');
-    return `${h}:${min}:${sec}.${ms}`;
+    const ms = (parseInt(m[4], 10) * 10).toString().padStart(3, '0');
+    return `${m[1].padStart(2,'0')}:${m[2]}:${m[3]}.${ms}`;
 }
 
 /**
  * Usuwa tagi formatowania ASS z tekstu dialogu
- * np. {\an8}, {\b1}, {\pos(x,y)}, \N -> newline
  */
 function stripAssTags(text) {
     return text
         .replace(/\{[^}]*\}/g, '')   // usuń wszystkie {tagi}
         .replace(/\\N/g, '\n')        // \N -> nowa linia
         .replace(/\\n/g, '\n')        // \n -> nowa linia
-        .replace(/\\h/g, ' ')         // \h -> spacja
+        .replace(/\\h/g, '\u00A0')    // \h -> niełamliwa spacja
+        .replace(/\n{3,}/g, '\n\n')   // max 2 kolejne newlines
         .trim();
 }
 

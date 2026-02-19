@@ -4,7 +4,7 @@
 module.exports = {
     id: 'community.animesub.info',
     version: '1.1.0',
-    name: 'AnimeSub.info Subtitles',
+    name: 'ASI Sub',
     description: 'Polskie napisy do anime z animesub.info',
     logo: 'https://i.imgur.com/qKLYVZx.png',
     resources: ['subtitles'],
